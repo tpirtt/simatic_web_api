@@ -2,16 +2,43 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hello World App</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Simatic Web API Demo</title>
 </head>
 <body>
-    <h1>Hello, World! 🌍</h1>
-    <p>Welcome to my simple web app.</p>
-    <button onclick="changeText()">Click Me</button>
-    <p id="message"></p>
+    <h2>Simatic Web API Session</h2>
 
-    <script src="script.js"></script>
+    <button id="loginBtn">Login</button>
+    <button id="pingBtn">Ping</button>
+    <button id="logoutBtn">Logout</button>
+
+    <pre id="output">Waiting for action...</pre>
+
+    <script type="module">
+        import { WebApiSession } from './simatic_web_api.js';
+
+        // Change these credentials as needed
+        const session = new WebApiSession("192.168.0.1", "admin", "Siemens1234!");
+
+        const output = document.getElementById('output');
+
+        async function runLogin() {
+            const token = await session.login();
+            output.textContent = token ? `Login successful!\nToken: ${token}` : 'Login failed.';
+        }
+
+        async function runPing() {
+            const result = await session.ping();
+            output.textContent = result ? `Ping successful:\n${JSON.stringify(result, null, 4)}` : 'Ping failed.';
+        }
+
+        async function runLogout() {
+            const success = await session.logout();
+            output.textContent = success ? 'Logout successful.' : 'Logout failed.';
+        }
+
+        document.getElementById('loginBtn').addEventListener('click', runLogin);
+        document.getElementById('pingBtn').addEventListener('click', runPing);
+        document.getElementById('logoutBtn').addEventListener('click', runLogout);
+    </script>
 </body>
 </html>

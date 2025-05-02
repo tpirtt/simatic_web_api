@@ -63,7 +63,6 @@ class WebApiSession:
         self._token = json_response.get("result", {}).get("token")
         return self._token
 
-
     # Logout
     def logout(self):
         self._id += 1
@@ -84,6 +83,27 @@ class WebApiSession:
         self._print_response(body, response.status_code, response)
         self._token = None
         return True
+    
+    # Ping
+    def ping(self):
+        self._id += 1
+        headers = {"Content-Type": "application/json", "X-Auth-Token": self._token}
+        body = {
+            "id": self._id,
+            "jsonrpc": "2.0",
+            "method": "Api.Ping"
+        }
+
+        try:
+            response = requests.post(self._url, json=body, headers=headers, verify=False)
+            response.raise_for_status()
+            json_response = response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error in ping request: {e}")
+            return None
+
+        self._print_response(body, response.status_code, response)
+        return json_response.get("result", {})
 
     # Browse tickets
     def browse_tickets(self):
