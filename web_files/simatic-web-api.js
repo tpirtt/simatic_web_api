@@ -125,7 +125,7 @@ class WebApiSession {
             jsonrpc: "2.0",
             method: "Files.Browse",
             params: {
-                resource : resource
+                resource: resource
             }
         };
 
@@ -149,4 +149,108 @@ class WebApiSession {
             return null;
         }
     }
+
+    async filesDownload(resource) {
+        this._id += 1;
+        const headers = {
+            "Content-Type": "application/json",
+            "X-Auth-Token": this._token
+        };
+        const body = {
+            id: this._id,
+            jsonrpc: "2.0",
+            method: "Files.Download",
+            params: {
+                resource: resource
+            }
+        };
+
+        try {
+            const response = await fetch(this._url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Download files failed: ${response.status}`);
+            }
+
+            const json = await response.json();
+            console.log("Browse files response:", JSON.stringify(json, null, 4));
+
+            return json?.result || {};
+        } catch (error) {
+            console.error(`Error in download files request: ${error}`);
+            return null;
+        }
+    }
+
+    async downloadFile(ticketId) {
+        const url = `https://${this.ip}/api/ticket?id=${ticketId}`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/octet-stream'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+
+            const arrayBuffer = await response.arrayBuffer();
+            const byteArray = new Uint8Array(arrayBuffer);
+            const base64String = btoa(String.fromCharCode(...byteArray));
+
+            const contentDisposition = response.headers.get("content-disposition");
+            let filename = "unknown.bin";
+            const match = contentDisposition && contentDisposition.match(/filename="?(.+?)"?$/i);
+            if (match) filename = match[1];
+
+            sessionStorage.setItem(`file_${ticketId}`, base64String);
+            console.log(`File "${filename}" saved to sessionStorage under key: file_${ticketId}`);
+        } catch (error) {
+            console.error(`Error in downloadFile:`, error);
+        }
+    }
+
+    async closeTicket(ticketId) {
+        this._id += 1;
+        const headers = {
+            "Content-Type": "application/json",
+            "X-Auth-Token": this._token
+        };
+        const body = {
+            id: this._id,
+            jsonrpc: "2.0",
+            method: "Api.CloseTicket",
+            params: {
+                id: ticketId
+            }
+        };
+
+        try {
+            const response = await fetch(this._url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Close ticket failed: ${response.status}`);
+            }
+
+            const json = await response.json();
+            console.log("Close ticket response:", JSON.stringify(json, null, 4));
+
+            return json?.result || {};
+        } catch (error) {
+            console.error(`Error in close ticket request: ${error}`);
+            return null;
+        }
+    }
+
 }

@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Simatic Web API Demo</title>
+    <title>Test Bench</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="bootstrap.min.css" rel="stylesheet">
 </head>
@@ -13,13 +13,18 @@
     <!-- Navbar -->
     <nav class="navbar navbar-dark bg-dark">
         <div class="container-fluid">
-            <span class="navbar-brand">Simatic Web API</span>
+            <span class="navbar-brand">Test Bench</span>
             <button class="btn btn-outline-light" id="logoutBtn" onclick="runLogout()" disabled>Logout</button>
         </div>
     </nav>
 
     <!-- Browse files -->
     <div class="container my-4">
+
+        <div class="mb-4">
+            <img src="logo.PNG" alt="Logo" class="img-fluid" style="max-height: 60px;">
+        </div>
+
         <div class="row g-2 align-items-end">
             <div class="col-sm-6">
                 <label for="resourceInput" class="form-label">Resource Path</label>
@@ -33,7 +38,23 @@
         <div class="row mt-3">
             <div class="col">
                 <label class="form-label">Browse Result</label>
-                <pre id="browseOutput" class="bg-light p-3 rounded border">Waiting...</pre>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle" id="browseTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Size (bytes)</th>
+                                <th>Last Modified</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" class="text-muted">Waiting...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -71,6 +92,13 @@
         </div>
     </div>
 
+    <!-- Global Spinner -->
+    <div id="globalSpinner" class="position-fixed top-50 start-50 translate-middle d-none" style="z-index: 1100;">
+        <div class="spinner-border text-primary" style="width: 4rem; height: 4rem;" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
     <script src="bootstrap.bundle.min.js"></script>
     <script src="simatic-web-api.js"></script>
     <script>
@@ -82,6 +110,14 @@
         const loginModalEl = document.getElementById('loginModal');
         const loginModal = new bootstrap.Modal(loginModalEl);
         const logoutBtn = document.getElementById('logoutBtn');
+
+        function showSpinner() {
+            document.getElementById('globalSpinner').classList.remove('d-none');
+        }
+
+        function hideSpinner() {
+            document.getElementById('globalSpinner').classList.add('d-none');
+        }
 
         function showAlert(message, type = 'info', delay = 5000) {
             const wrapper = document.createElement('div');
@@ -97,12 +133,15 @@
         }
 
         async function attemptLogin() {
+            showSpinner();
             const ip = window.location.hostname;
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
             session = new WebApiSession(ip, user, pass);
 
             const token = await session.login();
+            hideSpinner();
+
             if (token) {
                 document.getElementById('loginError').classList.add('d-none');
                 loginModal.hide();
@@ -119,6 +158,7 @@
             }
         }
 
+
         async function runPing() {
             if (!session) return;
             const result = await session.ping();
@@ -127,14 +167,17 @@
 
         async function runLogout() {
             if (!session) return;
+            showSpinner();
             const success = await session.logout();
-            showAlert(success ? 'Logout successful.' : 'Logout failed.', success ? 'success' : 'danger');
+            hideSpinner();
 
+            showAlert(success ? 'Logout successful.' : 'Logout failed.', success ? 'success' : 'danger');
             logoutBtn.disabled = true;
             clearTimeout(pingTimeout);
             clearInterval(pingInterval);
             loginModal.show();
         }
+
 
         document.addEventListener('DOMContentLoaded', () => {
             loginModal.show();
@@ -142,17 +185,30 @@
 
         document.getElementById('browseBtn').addEventListener('click', async () => {
             const resource = document.getElementById('resourceInput').value.trim();
-            const output = document.getElementById('browseOutput');
+            const tableBody = document.querySelector('#browseTable tbody');
 
             if (!resource) {
-                output.textContent = 'Please enter a resource path.';
+                tableBody.innerHTML = `<tr><td colspan="4" class="text-danger">Please enter a resource path.</td></tr>`;
                 return;
             }
 
+            showSpinner();
             const result = await session.filesBrowse(resource);
-            output.textContent = result
-                ? JSON.stringify(result, null, 4)
-                : 'Browse failed or returned no result.';
+            hideSpinner();
+
+            if (!result || !result.resources || result.resources.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="4" class="text-warning">No resources found.</td></tr>`;
+                return;
+            }
+
+            tableBody.innerHTML = result.resources.map(r => `
+        <tr>
+            <td>${r.name}</td>
+            <td>${r.type}</td>
+            <td>${r.type === 'file' ? r.size : '-'}</td>
+            <td>${r.last_modified || '-'}</td>
+        </tr>
+            `).join('');
         });
 
     </script>
