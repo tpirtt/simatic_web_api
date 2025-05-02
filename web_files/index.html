@@ -1,44 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Simatic Web API Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="bootstrap.min.css" rel="stylesheet">
 </head>
+
 <body>
-    <h2>Simatic Web API Session</h2>
 
-    <button id="loginBtn">Login</button>
-    <button id="pingBtn">Ping</button>
-    <button id="logoutBtn">Logout</button>
+    <!-- Navbar -->
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <span class="navbar-brand">Simatic Web API</span>
+            <button class="btn btn-outline-light" id="logoutBtn" onclick="runLogout()" disabled>Logout</button>
+        </div>
+    </nav>
 
-    <pre id="output">Waiting for action...</pre>
+    <!-- Browse files -->
+    <div class="container my-4">
+        <div class="row g-2 align-items-end">
+            <div class="col-sm-6">
+                <label for="resourceInput" class="form-label">Resource Path</label>
+                <input type="text" class="form-control" id="resourceInput">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-primary" id="browseBtn">Browse</button>
+            </div>
+        </div>
 
-    <script type="module">
-        import { WebApiSession } from './simatic_web_api.js';
+        <div class="row mt-3">
+            <div class="col">
+                <label class="form-label">Browse Result</label>
+                <pre id="browseOutput" class="bg-light p-3 rounded border">Waiting...</pre>
+            </div>
+        </div>
+    </div>
 
-        // Change these credentials as needed
-        const session = new WebApiSession("192.168.0.1", "admin", "Siemens1234!");
+    <!-- Alerts -->
+    <div class="position-fixed bottom-0 start-50 translate-middle-x p-3" style="z-index: 1080;">
+        <div id="alertContainer" class="d-flex flex-column align-items-center gap-2"></div>
+    </div>
 
-        const output = document.getElementById('output');
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static"
+        data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Login Required</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" id="username" class="form-control" value="admin">
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" id="password" class="form-control" value="Siemens1234!">
+                    </div>
+                    <div id="loginError" class="alert alert-danger d-none" role="alert">
+                        Login failed. Please try again.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" onclick="attemptLogin()">Login</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        async function runLogin() {
+    <script src="bootstrap.bundle.min.js"></script>
+    <script src="simatic-web-api.js"></script>
+    <script>
+        let session;
+        let pingTimeout = null;
+        let pingInterval = null;
+
+        const alertContainer = document.getElementById('alertContainer');
+        const loginModalEl = document.getElementById('loginModal');
+        const loginModal = new bootstrap.Modal(loginModalEl);
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        function showAlert(message, type = 'info', delay = 5000) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `alert alert-${type} alert-dismissible fade show`;
+            wrapper.role = 'alert';
+            wrapper.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+            alertContainer.appendChild(wrapper);
+            // Auto-dismiss after delay
+            setTimeout(() => {
+                const bsAlert = bootstrap.Alert.getOrCreateInstance(wrapper);
+                bsAlert.close();
+            }, delay);
+        }
+
+        async function attemptLogin() {
+            const ip = window.location.hostname;
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            session = new WebApiSession(ip, user, pass);
+
             const token = await session.login();
-            output.textContent = token ? `Login successful!\nToken: ${token}` : 'Login failed.';
+            if (token) {
+                document.getElementById('loginError').classList.add('d-none');
+                loginModal.hide();
+                logoutBtn.disabled = false;
+                showAlert('Login successful!', 'success');
+
+                pingTimeout = setTimeout(() => {
+                    runPing();
+                    pingInterval = setInterval(runPing, 30000);
+                }, 20000);
+            } else {
+                document.getElementById('loginError').classList.remove('d-none');
+                showAlert('Login failed.', 'danger');
+            }
         }
 
         async function runPing() {
+            if (!session) return;
             const result = await session.ping();
-            output.textContent = result ? `Ping successful:\n${JSON.stringify(result, null, 4)}` : 'Ping failed.';
+            showAlert(result ? 'Ping successful.' : 'Ping failed.', result ? 'info' : 'warning');
         }
 
         async function runLogout() {
+            if (!session) return;
             const success = await session.logout();
-            output.textContent = success ? 'Logout successful.' : 'Logout failed.';
+            showAlert(success ? 'Logout successful.' : 'Logout failed.', success ? 'success' : 'danger');
+
+            logoutBtn.disabled = true;
+            clearTimeout(pingTimeout);
+            clearInterval(pingInterval);
+            loginModal.show();
         }
 
-        document.getElementById('loginBtn').addEventListener('click', runLogin);
-        document.getElementById('pingBtn').addEventListener('click', runPing);
-        document.getElementById('logoutBtn').addEventListener('click', runLogout);
+        document.addEventListener('DOMContentLoaded', () => {
+            loginModal.show();
+        });
+
+        document.getElementById('browseBtn').addEventListener('click', async () => {
+            const resource = document.getElementById('resourceInput').value.trim();
+            const output = document.getElementById('browseOutput');
+
+            if (!resource) {
+                output.textContent = 'Please enter a resource path.';
+                return;
+            }
+
+            const result = await session.filesBrowse(resource);
+            output.textContent = result
+                ? JSON.stringify(result, null, 4)
+                : 'Browse failed or returned no result.';
+        });
+
     </script>
 </body>
+
 </html>

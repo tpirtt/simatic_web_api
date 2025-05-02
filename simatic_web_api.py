@@ -330,3 +330,51 @@ class WebApiSession:
 
         self._print_response(body, response.status_code, response)
         return json_response.get("result")
+
+    # Files browse
+    def browse_files(self, resource):
+        self._id += 1
+        headers = {"Content-Type": "application/json", "X-Auth-Token": self._token}
+        body = {
+            "id": self._id,
+            "jsonrpc": "2.0",
+            "method": "Files.Browse",
+            "params": {
+                "resource": resource
+            }
+        }
+
+        try:
+            response = requests.post(self._url, json=body, headers=headers, verify=False)
+            response.raise_for_status()
+            json_response = response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error in files browse request: {e}")
+            return None
+
+        self._print_response(body, response.status_code, response)
+        return json_response.get("result")
+    
+    # Files create
+    def create_file(self, resource):
+        self._id += 1
+        headers = {"Content-Type": "application/json", "X-Auth-Token": self._token}
+        body = {
+            "id": self._id,
+            "jsonrpc": "2.0",
+            "method": "Files.Create",
+            "params": {
+                "resource": resource
+            }
+        }
+
+        try:
+            response = requests.post(self._url, json=body, headers=headers, verify=False)
+            response.raise_for_status()
+            json_response = response.json()
+        except requests.exceptions.RequestException as e:
+            print(f"Error in files create request: {e}")
+            return None
+
+        self._print_response(body, response.status_code, response)
+        return json_response.get("result")
