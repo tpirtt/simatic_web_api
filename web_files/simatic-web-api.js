@@ -1,28 +1,44 @@
 class WebApiSession {
-    constructor(ip, username, password) {
+    constructor(ip, token = null) {
         this.ip = ip;
-        this.username = username;
-        this.password = password;
         this._id = 0;
-        this._token = null;
+        this._token = token;
         this._url = `https://${this.ip}/api/jsonrpc`;
     }
 
     setToken(token) {
         this._token = token;
+        this.saveToken();
     }
 
-    async login() {
+    saveToken() {
+        if (this._token) {
+            localStorage.setItem(`webApiToken-${this.ip}`, this._token);
+        }
+    }
+
+    loadToken() {
+        const token = localStorage.getItem(`webApiToken-${this.ip}`);
+        if (token) {
+            this._token = token;
+            return true;
+        }
+        return false;
+    }
+
+    clearToken() {
+        localStorage.removeItem(`webApiToken-${this.ip}`);
+        this._token = null;
+    }
+
+    async login(username, password) {
         this._id += 1;
         const headers = { "Content-Type": "application/json" };
         const body = {
             id: this._id,
             jsonrpc: "2.0",
             method: "Api.Login",
-            params: {
-                user: this.username,
-                password: this.password
-            }
+            params: { user: username, password }
         };
 
         try {
@@ -32,14 +48,12 @@ class WebApiSession {
                 body: JSON.stringify(body)
             });
 
-            if (!response.ok) {
-                throw new Error(`Login failed: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Login failed: ${response.status}`);
 
             const json = await response.json();
             console.log("Login response:", JSON.stringify(json, null, 4));
 
-            this._token = json?.result?.token || null;
+            this.setToken(json?.result?.token || null);
             return this._token;
         } catch (error) {
             console.error(`Error in login request: ${error}`);
@@ -66,14 +80,12 @@ class WebApiSession {
                 body: JSON.stringify(body)
             });
 
-            if (!response.ok) {
-                throw new Error(`Logout failed: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`Logout failed: ${response.status}`);
 
             const json = await response.json();
             console.log("Logout response:", JSON.stringify(json, null, 4));
 
-            this._token = null;
+            this.clearToken();
             return true;
         } catch (error) {
             console.error(`Error in logout request: ${error}`);
@@ -188,6 +200,7 @@ class WebApiSession {
 
     async downloadFile(ticketId) {
         const url = `https://${this.ip}/api/ticket?id=${ticketId}`;
+        console.log(`Starting download from: ${url}`);
 
         try {
             const response = await fetch(url, {
@@ -197,23 +210,26 @@ class WebApiSession {
                 }
             });
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
+            console.log(`HTTP status: ${response.status}`);
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
             const arrayBuffer = await response.arrayBuffer();
-            const byteArray = new Uint8Array(arrayBuffer);
-            const base64String = btoa(String.fromCharCode(...byteArray));
+            console.log(`Downloaded ${arrayBuffer.byteLength} bytes`);
 
             const contentDisposition = response.headers.get("content-disposition");
-            let filename = "unknown.bin";
-            const match = contentDisposition && contentDisposition.match(/filename="?(.+?)"?$/i);
-            if (match) filename = match[1];
+            console.log(`Content-Disposition header: ${contentDisposition}`);
 
-            sessionStorage.setItem(`file_${ticketId}`, base64String);
-            console.log(`File "${filename}" saved to sessionStorage under key: file_${ticketId}`);
+            let filename = "downloaded_file.bin";
+            const match = contentDisposition && contentDisposition.match(/filename="?(.+?)"?$/i);
+            if (match) {
+                filename = match[1];
+                console.log(`Extracted filename: ${filename}`);
+            }
+
+            return { arrayBuffer, filename };
         } catch (error) {
             console.error(`Error in downloadFile:`, error);
+            return null;
         }
     }
 

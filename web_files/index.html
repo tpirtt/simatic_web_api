@@ -46,11 +46,12 @@
                                 <th>Type</th>
                                 <th>Size (bytes)</th>
                                 <th>Last Modified</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td colspan="4" class="text-muted">Waiting...</td>
+                                <td colspan="5" class="text-muted">Waiting...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -125,7 +126,6 @@
             wrapper.role = 'alert';
             wrapper.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
             alertContainer.appendChild(wrapper);
-            // Auto-dismiss after delay
             setTimeout(() => {
                 const bsAlert = bootstrap.Alert.getOrCreateInstance(wrapper);
                 bsAlert.close();
@@ -134,17 +134,16 @@
 
         async function attemptLogin() {
             showSpinner();
-            const ip = window.location.hostname;
             const user = document.getElementById('username').value;
             const pass = document.getElementById('password').value;
-            session = new WebApiSession(ip, user, pass);
 
-            const token = await session.login();
+            const token = await session.login(user, pass);
             hideSpinner();
 
             if (token) {
                 document.getElementById('loginError').classList.add('d-none');
                 loginModal.hide();
+                logoutBtn.focus();
                 logoutBtn.disabled = false;
                 showAlert('Login successful!', 'success');
 
@@ -157,7 +156,6 @@
                 showAlert('Login failed.', 'danger');
             }
         }
-
 
         async function runPing() {
             if (!session) return;
@@ -178,9 +176,22 @@
             loginModal.show();
         }
 
+        document.addEventListener('DOMContentLoaded', async () => {
+            const ip = window.location.hostname;
+            session = new WebApiSession(ip);
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loginModal.show();
+            const hasToken = session.loadToken();
+            if (hasToken) {
+                logoutBtn.disabled = false;
+                showAlert('Session restored from token.', 'success');
+
+                pingTimeout = setTimeout(() => {
+                    runPing();
+                    pingInterval = setInterval(runPing, 30000);
+                }, 20000);
+            } else {
+                loginModal.show();
+            }
         });
 
         document.getElementById('browseBtn').addEventListener('click', async () => {
@@ -188,7 +199,7 @@
             const tableBody = document.querySelector('#browseTable tbody');
 
             if (!resource) {
-                tableBody.innerHTML = `<tr><td colspan="4" class="text-danger">Please enter a resource path.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-danger">Please enter a resource path.</td></tr>`;
                 return;
             }
 
@@ -197,21 +208,64 @@
             hideSpinner();
 
             if (!result || !result.resources || result.resources.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="4" class="text-warning">No resources found.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-warning">No resources found.</td></tr>`;
                 return;
             }
 
             tableBody.innerHTML = result.resources.map(r => `
-        <tr>
-            <td>${r.name}</td>
-            <td>${r.type}</td>
-            <td>${r.type === 'file' ? r.size : '-'}</td>
-            <td>${r.last_modified || '-'}</td>
-        </tr>
+                <tr>
+                    <td>${r.name}</td>
+                    <td>${r.type}</td>
+                    <td>${r.type === 'file' ? r.size : '-'}</td>
+                    <td>${r.last_modified || '-'}</td>
+                    <td>
+                        ${r.type === 'file' ? `
+                            <button class="btn btn-sm btn-primary downloadBtn" data-resource="${r.name}">Download</button>
+                        ` : '-'}
+                    </td>
+                </tr>
             `).join('');
-        });
 
+            document.querySelectorAll('.downloadBtn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const resourcePath = document.getElementById('resourceInput').value.trim();
+                    const fileName = e.target.getAttribute('data-resource');
+                    const fullResourcePath = `${resourcePath}/${fileName}`;
+
+                    showSpinner();
+
+                    const downloadResult = await session.filesDownload(fullResourcePath);
+                    if (!downloadResult) {
+                        hideSpinner();
+                        showAlert('Failed to initiate file download.', 'danger');
+                        return;
+                    }
+
+                    const ticketId = downloadResult;
+                    const fileDownloadResult = await session.downloadFile(ticketId);
+                    if (!fileDownloadResult) {
+                        hideSpinner();
+                        showAlert('Failed to download the file.', 'danger');
+                        return;
+                    }
+
+                    const { arrayBuffer, filename } = fileDownloadResult;
+                    const blob = new Blob([arrayBuffer]);
+                    const downloadLink = document.createElement("a");
+                    downloadLink.href = URL.createObjectURL(blob);
+                    downloadLink.download = filename;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+
+                    const closeResult = await session.closeTicket(ticketId);
+                    hideSpinner();
+                    showAlert(closeResult ? 'Ticket closed successfully.' : 'Failed to close the ticket.', closeResult ? 'success' : 'danger');
+                });
+            });
+        });
     </script>
+
 </body>
 
 </html>
