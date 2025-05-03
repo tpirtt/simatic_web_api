@@ -1,13 +1,13 @@
 Identifier of test is created from the start time.
 ---------------------------------------------------------
-"Test-2025-05-02-194401_0001"
+"Test-2025-05-02-194401_00001"
 
 Test metadata saved in each file start:
 ---------------------------------------------------------
-Identifier: <string> (len 27)
+Identifier: <string> (len 28)
 Test name: <string> (len 64)
 Test operator: <string> (len 32)
-File number: <16 bit integer> (1 - 9999)
+File number: <32 bit integer> (1 - 99999)
 Sampling interval in milliseconds: <16 bit integer>
 Start time: <datetime>
 
