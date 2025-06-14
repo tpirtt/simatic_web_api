@@ -1,59 +1,30 @@
 const config = {
     metadata: [
-        { name: "Identifier", type: "string", length: 34 },
-        { name: "TestName", type: "string", length: 66 },
-        { name: "TestOperator", type: "string", length: 34 },
-        { name: "FileNumber", type: "int32", length: 4 },
-        { name: "StartTime", type: "datetime64", length: 8 },
-        { name: "SamplingInterval", type: "int32", length: 4 },
+        { name: "Identifier", type: "string", length: 34, unit: "" },
+        { name: "TestName", type: "string", length: 66, unit: "" },
+        { name: "TestOperator", type: "string", length: 34, unit: "" },
+        { name: "FileNumber", type: "int32", length: 4, unit: "" },
+        { name: "StartTime", type: "datetime64", length: 8, unit: "ISO8601" },
+        { name: "SamplingInterval", type: "int32", length: 4, unit: "ms" },
     ],
     record: [
-        { name: "Flow", type: "float32", length: 4 },
-        { name: "PressureIn", type: "float32", length: 4 },
-        { name: "PressureOut", type: "float32", length: 4 },
-        { name: "TemperatureIn", type: "float32", length: 4 },
-        { name: "TemperatureOut", type: "float32", length: 4 },
-        { name: "Vibration", type: "float32", length: 4 },
-        { name: "Energy", type: "float32", length: 4 },
+        { name: "Flow", type: "float32", length: 4, unit: "lmin" },
+        { name: "PressureIn", type: "float32", length: 4, unit: "bar" },
+        { name: "PressureOut", type: "float32", length: 4, unit: "bar" },
+        { name: "TemperatureIn", type: "float32", length: 4, unit: "C" },
+        { name: "TemperatureOut", type: "float32", length: 4, unit: "C" },
+        { name: "Vibration", type: "float32", length: 4, unit: "g" },
+        { name: "Energy", type: "float32", length: 4, unit: "J" },
         {
             name: "BinaryStates",
             type: "uint32",
             length: 4,
             bits: [
-                "Reserved0",
-                "Reserved1",
-                "Reserved2",
-                "Reserved3",
-                "Reserved4",
-                "Reserved5",
-                "Reserved6",
-                "Reserved7",
-                "Reserved8",
-                "Reserved9",
-                "Reserved10",
-                "Reserved11",
-                "Reserved12",
-                "Reserved13",
-                "Reserved14",
-                "Reserved15",
-                "Reserved16",
-                "Reserved17",
-                "Reserved18",
-                "Reserved19",
-                "Reserved20",
-                "Reserved21",
-                "Reserved22",
-                "Reserved23",
-                "Reserved24",
-                "Reserved25",
-                "Reserved26",
-                "Reserved27",
-                "Reserved28",
-                "Reserved29",
-                "Reserved30",
-                "Reserved31"
+                "RSV_X31", "RSV_X30", "RSV_X29", "RSV_X28", "RSV_X27", "RSV_X26", "RSV_X25", "RSV_X24",
+                "RSV_X23", "RSV_X22", "RSV_X21", "RSV_X20", "RSV_X19", "RSV_X18", "RSV_X17", "RSV_X16",
+                "RSV_X15", "RSV_X14", "RSV_X13", "RSV_X12", "RSV_X11", "RSV_X10", "RSV_X9", "RSV_X8",
+                "RSV_X7", "RSV_X6", "RSV_X5", "RSV_X4", "RSV_X3", "RSV_X2", "RSV_X1", "RSV_X0"
             ]
-
         }
     ]
 };
@@ -100,17 +71,22 @@ function createCSV(metadataValues, records) {
     if (records.length > 0) {
         csv += 'Records\n';
 
-        // Get headers including expanded BinaryStates bit names
-        const baseHeaders = Object.keys(records[0]).filter(h => h !== 'Index' && !h.startsWith('BinaryStates_'));
-        // Find the bit names from first record keys starting with BinaryStates_
-        const bitHeaders = Object.keys(records[0]).filter(h => h.startsWith('BinaryStates_'));
-        const headers = ['Index', ...baseHeaders, ...bitHeaders];
+        const headers = ['Index'];
+
+        for (const field of config.record) {
+            if (field.name === 'BinaryStates') continue;
+            const name = field.unit ? `${field.name}_${field.unit}` : field.name;
+            headers.push(name);
+        }
+
+        const bitHeaders = Object.keys(records[0]).filter(h => h.startsWith('Bin_'));
+        headers.push(...bitHeaders);
 
         csv += headers.map(h => `"${h}"`).join(';') + '\n';
 
         for (const record of records) {
             const row = headers.map(h => {
-                let val = record[h];
+                let val = record[h] ?? "";
                 if (typeof val === 'string' && (val.includes(';') || val.includes('"'))) {
                     val = '"' + val.replace(/"/g, '""') + '"';
                 }
@@ -126,15 +102,14 @@ async function processBinaryAndDownload(arrayBuffer, originalFilename) {
     const dataView = new DataView(arrayBuffer);
     let offset = 0;
 
-    // Read metadata
     const metadataValues = {};
     for (const field of config.metadata) {
         const val = readField(dataView, offset, field);
         offset += field.length;
-        metadataValues[field.name] = val;
+        const key = field.unit ? `${field.name}_${field.unit}` : field.name;
+        metadataValues[key] = val;
     }
 
-    // Read records
     const recordLength = config.record.reduce((sum, f) => sum + f.length, 0);
     const records = [];
     let index = 1;
@@ -143,17 +118,21 @@ async function processBinaryAndDownload(arrayBuffer, originalFilename) {
         for (const field of config.record) {
             const val = readField(dataView, offset, field);
             offset += field.length;
-            record[field.name] = val;
+            if (field.name !== 'BinaryStates') {
+                const key = field.unit ? `${field.name}_${field.unit}` : field.name;
+                record[key] = val;
+            } else {
+                record[field.name] = val;
+            }
         }
+
         record.Index = index++;
 
-        // Decode BinaryStates bits if bits are defined
         const binaryField = config.record.find(f => f.name === "BinaryStates");
         if (binaryField && binaryField.bits) {
             const bitsDecoded = decodeBinaryStates(record.BinaryStates, binaryField.bits);
-            // Append decoded bits with a prefix to avoid collision
             for (const [bitName, bitValue] of Object.entries(bitsDecoded)) {
-                record[`BinaryStates_${bitName}`] = bitValue;
+                record[`Bin_${bitName}`] = bitValue;
             }
         }
 
@@ -168,16 +147,18 @@ async function processBinaryAndDownload(arrayBuffer, originalFilename) {
     const jsonStr = JSON.stringify(jsonData, null, 2);
     const csvStr = createCSV(metadataValues, records);
 
+    const baseFilename = originalFilename.replace(/\.[^/.]+$/, "");
+
     const zip = new JSZip();
     zip.file(originalFilename, arrayBuffer);
-    zip.file("data.json", jsonStr);
-    zip.file("data.csv", csvStr);
+    zip.file(`${baseFilename}.json`, jsonStr);
+    zip.file(`${baseFilename}.csv`, csvStr);
 
     const content = await zip.generateAsync({ type: "blob" });
 
     const a = document.createElement("a");
     a.href = URL.createObjectURL(content);
-    a.download = originalFilename.replace(/\.[^/.]+$/, "") + "_bundle.zip";
+    a.download = `${baseFilename}_bundle.zip`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
