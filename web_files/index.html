@@ -12,9 +12,12 @@
 
     <!-- Navbar -->
     <nav class="navbar navbar-dark bg-dark">
-        <div class="container-fluid">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
             <span class="navbar-brand">Test Bench</span>
-            <button class="btn btn-outline-light" id="logoutBtn" onclick="runLogout()" disabled>Logout</button>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-outline-light" id="toggleBrowseControlsBtn">Browse Controls</button>
+                <button class="btn btn-outline-light" id="logoutBtn" onclick="runLogout()" disabled>Logout</button>
+            </div>
         </div>
     </nav>
 
@@ -25,7 +28,7 @@
             <img src="logo.PNG" alt="Logo" class="img-fluid" style="max-height: 60px;">
         </div>
 
-        <div class="row g-2 align-items-end">
+        <div id="browseControls" class="row g-2 align-items-end d-none mt-3">
             <div class="col-sm-6">
                 <label for="resourceInput" class="form-label">Resource Path</label>
                 <input type="text" class="form-control" id="resourceInput" value="/UserFiles">
@@ -150,6 +153,8 @@
                 logoutBtn.disabled = false;
                 showAlert('Login successful!', 'success');
 
+                document.getElementById('browseBtn').click();
+
                 pingTimeout = setTimeout(() => {
                     runPing();
                     pingInterval = setInterval(runPing, 30000);
@@ -183,10 +188,16 @@
             const ip = window.location.hostname;
             session = new WebApiSession(ip);
 
+            document.getElementById('toggleBrowseControlsBtn').addEventListener('click', () => {
+                const browseControls = document.getElementById('browseControls');
+                browseControls.classList.toggle('d-none');
+            });
+
             const hasToken = session.loadToken();
             if (hasToken) {
                 logoutBtn.disabled = false;
                 showAlert('Session restored from token.', 'success');
+                document.getElementById('browseBtn').click();
 
                 pingTimeout = setTimeout(() => {
                     runPing();
@@ -224,6 +235,7 @@
                     <td>
                         ${r.type === 'file' ? `
                             <button class="btn btn-sm btn-primary downloadBtn" data-resource="${r.name}">Download</button>
+                            <button class="btn btn-sm btn-danger deleteBtn" data-resource="${r.name}">Delete</button>
                         ` : '-'}
                     </td>
                 </tr>
@@ -238,21 +250,16 @@
                     showSpinner();
 
                     try {
-                        // Step 1: Initiate download
                         const downloadResult = await session.filesDownload(fullResourcePath);
                         if (!downloadResult) throw new Error('Failed to initiate file download.');
 
-                        // Step 2: Download file as ArrayBuffer
                         const ticketId = downloadResult;
                         const fileDownloadResult = await session.downloadFile(ticketId);
                         if (!fileDownloadResult) throw new Error('Failed to download the file.');
 
                         const { arrayBuffer, filename } = fileDownloadResult;
-
-                        // Step 3: Use your binaryDownloader's function to parse and trigger ZIP download
                         await processBinaryAndDownload(arrayBuffer, filename);
 
-                        // Step 4: Close ticket
                         const closeResult = await session.closeTicket(ticketId);
                         showAlert(closeResult ? 'Download completed and ticket closed.' : 'Download completed but failed to close ticket.', closeResult ? 'success' : 'warning');
                     } catch (error) {
@@ -263,6 +270,30 @@
                 });
             });
 
+            document.querySelectorAll('.deleteBtn').forEach(button => {
+                button.addEventListener('click', async (e) => {
+                    const resourcePath = document.getElementById('resourceInput').value.trim();
+                    const fileName = e.target.getAttribute('data-resource');
+                    const fullResourcePath = `${resourcePath}/${fileName}`;
+
+                    if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+
+                    showSpinner();
+                    try {
+                        const deleteResult = await session.filesDelete(fullResourcePath);
+                        if (deleteResult) {
+                            showAlert(`Deleted "${fileName}".`, 'success');
+                            document.getElementById('browseBtn').click(); // Refresh listing
+                        } else {
+                            showAlert(`Failed to delete "${fileName}".`, 'danger');
+                        }
+                    } catch (error) {
+                        showAlert(error.message, 'danger');
+                    } finally {
+                        hideSpinner();
+                    }
+                });
+            });
         });
     </script>
 

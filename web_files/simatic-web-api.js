@@ -13,12 +13,12 @@ class WebApiSession {
 
     saveToken() {
         if (this._token) {
-            localStorage.setItem(`webApiToken-${this.ip}`, this._token);
+            sessionStorage.setItem(`webApiToken-${this.ip}`, this._token);
         }
     }
 
     loadToken() {
-        const token = localStorage.getItem(`webApiToken-${this.ip}`);
+        const token = sessionStorage.getItem(`webApiToken-${this.ip}`);
         if (token) {
             this._token = token;
             return true;
@@ -27,7 +27,7 @@ class WebApiSession {
     }
 
     clearToken() {
-        localStorage.removeItem(`webApiToken-${this.ip}`);
+        sessionStorage.removeItem(`webApiToken-${this.ip}`);
         this._token = null;
     }
 
@@ -158,6 +158,42 @@ class WebApiSession {
             return json?.result || {};
         } catch (error) {
             console.error(`Error in browse files request: ${error}`);
+            return null;
+        }
+    }
+
+    async filesDelete(resource) {
+        this._id += 1;
+        const headers = {
+            "Content-Type": "application/json",
+            "X-Auth-Token": this._token
+        };
+        const body = {
+            id: this._id,
+            jsonrpc: "2.0",
+            method: "Files.Delete",
+            params: {
+                resource: resource
+            }
+        };
+
+        try {
+            const response = await fetch(this._url, {
+                method: "POST",
+                headers,
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Delete files failed: ${response.status}`);
+            }
+
+            const json = await response.json();
+            console.log("Delete files response:", JSON.stringify(json, null, 4));
+
+            return json?.result || {};
+        } catch (error) {
+            console.error(`Error in delete files request: ${error}`);
             return null;
         }
     }

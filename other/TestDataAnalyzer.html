@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Test Data Analyzer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        #uploadSection {
+            margin-bottom: 20px;
+        }
+
+        #plot {
+            width: 100%;
+            height: 600px;
+        }
+
+        .info {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Test Data Analyzer</h1>
+
+    <div id="uploadSection">
+        <label for="jsonFile">Select JSON file:</label>
+        <input type="file" id="jsonFile" accept=".json">
+    </div>
+
+    <div id="plot"></div>
+
+    <div class="info" id="fileInfo"></div>
+
+    <script>
+        const DateTime = luxon.DateTime;
+
+        document.getElementById('jsonFile').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    analyzeAndPlot(json);
+                } catch (err) {
+                    alert('Invalid JSON file');
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function analyzeAndPlot(data) {
+            const metadata = data.metadata;
+            const records = data.records;
+            const startTime = DateTime.fromISO(metadata.StartTime);
+            const intervalMs = metadata.SamplingInterval;
+
+            const timeAxis = records.map((r, i) =>
+                startTime.plus({ milliseconds: i * intervalMs }).toISO()
+            );
+
+            // Numeric fields excluding Index and binary states
+            const baseFields = Object.keys(records[0]).filter(k =>
+                k !== 'Index' && k !== 'BinaryStates' && !k.startsWith('BinaryStates_')
+            );
+
+            // Create traces for numeric fields
+            const traces = baseFields.map(field => ({
+                x: timeAxis,
+                y: records.map(r => r[field]),
+                mode: 'lines',
+                name: field
+            }));
+
+            // Binary state fields start with "BinaryStates_"
+            const binaryFields = Object.keys(records[0]).filter(k => k.startsWith('BinaryStates_'));
+
+            // Add traces for binary states with values 0 or 1, dashed lines for distinction
+            for (const bitField of binaryFields) {
+                traces.push({
+                    x: timeAxis,
+                    y: records.map(r => r[bitField] ? 1 : 0),
+                    mode: 'lines',
+                    name: bitField.replace('BinaryStates_', ''),
+                    line: { dash: 'dot' }
+                });
+            }
+
+            Plotly.newPlot('plot', traces, {
+                title: `Test: ${metadata.TestName} by ${metadata.TestOperator}`,
+                xaxis: { title: 'Time' },
+                yaxis: { title: 'Values' },
+                legend: { orientation: "h", y: -0.3 },
+                margin: { t: 50 }
+            });
+
+            document.getElementById('fileInfo').innerHTML = `
+                <strong>Identifier:</strong> ${metadata.Identifier}<br>
+                <strong>Start Time:</strong> ${startTime.toLocaleString(DateTime.DATETIME_MED)}<br>
+                <strong>Records:</strong> ${records.length}<br>
+                <strong>Sampling Interval:</strong> ${intervalMs} ms
+            `;
+        }
+    </script>
+
+</body>
+
+</html>

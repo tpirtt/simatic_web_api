@@ -1,4 +1,3 @@
-// binaryDownloader.js
 const config = {
     metadata: [
         { name: "Identifier", type: "string", length: 34 },
@@ -16,7 +15,46 @@ const config = {
         { name: "TemperatureOut", type: "float32", length: 4 },
         { name: "Vibration", type: "float32", length: 4 },
         { name: "Energy", type: "float32", length: 4 },
-        { name: "BinaryStates", type: "uint32", length: 4 },
+        {
+            name: "BinaryStates",
+            type: "uint32",
+            length: 4,
+            bits: [
+                "Reserved0",
+                "Reserved1",
+                "Reserved2",
+                "Reserved3",
+                "Reserved4",
+                "Reserved5",
+                "Reserved6",
+                "Reserved7",
+                "Reserved8",
+                "Reserved9",
+                "Reserved10",
+                "Reserved11",
+                "Reserved12",
+                "Reserved13",
+                "Reserved14",
+                "Reserved15",
+                "Reserved16",
+                "Reserved17",
+                "Reserved18",
+                "Reserved19",
+                "Reserved20",
+                "Reserved21",
+                "Reserved22",
+                "Reserved23",
+                "Reserved24",
+                "Reserved25",
+                "Reserved26",
+                "Reserved27",
+                "Reserved28",
+                "Reserved29",
+                "Reserved30",
+                "Reserved31"
+            ]
+
+        }
     ]
 };
 
@@ -45,6 +83,14 @@ function readField(dataView, offset, field) {
     }
 }
 
+function decodeBinaryStates(value, bitNames) {
+    const bits = {};
+    for (let i = 0; i < bitNames.length; i++) {
+        bits[bitNames[i]] = !!(value & (1 << (31 - i))); // MSB = bit 0
+    }
+    return bits;
+}
+
 function createCSV(metadataValues, records) {
     let csv = 'Metadata\n';
     csv += Object.entries(metadataValues)
@@ -53,7 +99,13 @@ function createCSV(metadataValues, records) {
 
     if (records.length > 0) {
         csv += 'Records\n';
-        const headers = ['Index', ...Object.keys(records[0]).filter(h => h !== 'Index')];
+
+        // Get headers including expanded BinaryStates bit names
+        const baseHeaders = Object.keys(records[0]).filter(h => h !== 'Index' && !h.startsWith('BinaryStates_'));
+        // Find the bit names from first record keys starting with BinaryStates_
+        const bitHeaders = Object.keys(records[0]).filter(h => h.startsWith('BinaryStates_'));
+        const headers = ['Index', ...baseHeaders, ...bitHeaders];
+
         csv += headers.map(h => `"${h}"`).join(';') + '\n';
 
         for (const record of records) {
@@ -94,6 +146,17 @@ async function processBinaryAndDownload(arrayBuffer, originalFilename) {
             record[field.name] = val;
         }
         record.Index = index++;
+
+        // Decode BinaryStates bits if bits are defined
+        const binaryField = config.record.find(f => f.name === "BinaryStates");
+        if (binaryField && binaryField.bits) {
+            const bitsDecoded = decodeBinaryStates(record.BinaryStates, binaryField.bits);
+            // Append decoded bits with a prefix to avoid collision
+            for (const [bitName, bitValue] of Object.entries(bitsDecoded)) {
+                record[`BinaryStates_${bitName}`] = bitValue;
+            }
+        }
+
         records.push(record);
     }
 
