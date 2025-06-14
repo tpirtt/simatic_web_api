@@ -102,6 +102,9 @@
 
     <script src="bootstrap.bundle.min.js"></script>
     <script src="simatic-web-api.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="binaryDownloader.js"></script>
+
     <script>
         let session;
         let pingTimeout = null;
@@ -234,35 +237,32 @@
 
                     showSpinner();
 
-                    const downloadResult = await session.filesDownload(fullResourcePath);
-                    if (!downloadResult) {
+                    try {
+                        // Step 1: Initiate download
+                        const downloadResult = await session.filesDownload(fullResourcePath);
+                        if (!downloadResult) throw new Error('Failed to initiate file download.');
+
+                        // Step 2: Download file as ArrayBuffer
+                        const ticketId = downloadResult;
+                        const fileDownloadResult = await session.downloadFile(ticketId);
+                        if (!fileDownloadResult) throw new Error('Failed to download the file.');
+
+                        const { arrayBuffer, filename } = fileDownloadResult;
+
+                        // Step 3: Use your binaryDownloader's function to parse and trigger ZIP download
+                        await processBinaryAndDownload(arrayBuffer, filename);
+
+                        // Step 4: Close ticket
+                        const closeResult = await session.closeTicket(ticketId);
+                        showAlert(closeResult ? 'Download completed and ticket closed.' : 'Download completed but failed to close ticket.', closeResult ? 'success' : 'warning');
+                    } catch (error) {
+                        showAlert(error.message, 'danger');
+                    } finally {
                         hideSpinner();
-                        showAlert('Failed to initiate file download.', 'danger');
-                        return;
                     }
-
-                    const ticketId = downloadResult;
-                    const fileDownloadResult = await session.downloadFile(ticketId);
-                    if (!fileDownloadResult) {
-                        hideSpinner();
-                        showAlert('Failed to download the file.', 'danger');
-                        return;
-                    }
-
-                    const { arrayBuffer, filename } = fileDownloadResult;
-                    const blob = new Blob([arrayBuffer]);
-                    const downloadLink = document.createElement("a");
-                    downloadLink.href = URL.createObjectURL(blob);
-                    downloadLink.download = filename;
-                    document.body.appendChild(downloadLink);
-                    downloadLink.click();
-                    document.body.removeChild(downloadLink);
-
-                    const closeResult = await session.closeTicket(ticketId);
-                    hideSpinner();
-                    showAlert(closeResult ? 'Ticket closed successfully.' : 'Failed to close the ticket.', closeResult ? 'success' : 'danger');
                 });
             });
+
         });
     </script>
 

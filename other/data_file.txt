@@ -1,0 +1,74 @@
+Identifier of test is created from the start time.
+---------------------------------------------------------
+'Test-2012-01-01-031728_00001.bin' (The file name must not be longer than 55 characters)
+
+Test metadata saved in each file start:
+---------------------------------------------------------
+Identifier: <string> (len 32)
+Test name: <string> (len 64)
+Test operator: <string> (len 32)
+File number: <32 bit integer> (1 - 99999)
+Start time: <datetime> (len 8)
+Sampling interval in milliseconds: <32 bit integer>
+
+Test procedure:
+---------------------------------------------------------
+1. Create new text and define the text metadata
+2. Start test
+3. End test
+
+Principle of handling the test file:
+---------------------------------------------------------
+1. When test is started a new file is created with metadata written to it.
+2. Byte offset written is saved after each write action.
+3. When data buffer is full, the data is written to the file.
+4. This procedure will continue until 16 MB is written or the test is stopped.
+
+32 Bytes per record:
+---------------------------------------------------------
+1. Flow (Pulse)
+2. Pressure (mA)
+3. Pressure (mA)
+4. Temperature (IO-Link)
+5. Temperature (IO-Link)
+6. Vibration (IO-Link)
+7. Energy (Energy module)
+8. Binary states 32 bit
+
+---------------------------------------------------------
+
+The binary file consists of the metadata header and the records after that. There might be varying number of records in different files.
+
+Test metadata saved in each file start:
+---------------------------------------------------------
+Identifier: <string> (len 34B)
+Test name: <string> (len 66B)
+Test operator: <string> (len 34B)
+File number: <int> (len 4B) 
+Start time: <datetime> (len B8)
+Sampling interval in milliseconds: <int> (len 4B)
+
+Each string starts with 2 bytes: 
+The first one tells the length of the actual character string. 
+The second one tells how many characters are meaninful in that string.
+
+The starttime format is LDT. it stores the date and time-of-day information in nanoseconds since 01/01/1970 0:0.
+
+Numbers are Little-Endian.
+An operand of data type DINT (Double INT) has a length of 32 bits and consists of two components: 
+a sign and a numerical value in the two's complement. The signal states of bits 0 to 30 represent the number value. 
+The signal state of bit 31 represents the sign. The sign may assume "0" for the positive, or "1" for the negative signal state.
+
+The records have following structure:
+---------------------------------------------------------
+1. Flow <real> (len 32)
+2. PressureIn <real> (len 32)
+3. PressureOut <real> (len 32)
+4. TemperatureIn <real> (len 32)
+5. TemperatureOut <real> (len 32)
+6. Vibration <real> (len 32)
+7. Energy <real> (len 32)
+8. Binary states 32 bit <word> (len 32)
+
+
+

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Binary to JSON and CSV Downloader with ZIP</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+
+<body>
+    <input type="file" id="binFile" />
+    <button onclick="processAndDownload()">Download ZIP (Binary + JSON + CSV)</button>
+
+    <script>
+        const config = {
+            metadata: [
+                { name: "Identifier", type: "string", length: 34 },
+                { name: "TestName", type: "string", length: 66 },
+                { name: "TestOperator", type: "string", length: 34 },
+                { name: "FileNumber", type: "int32", length: 4 },
+                { name: "StartTime", type: "datetime64", length: 8 },
+                { name: "SamplingInterval", type: "int32", length: 4 },
+            ],
+            record: [
+                { name: "Flow", type: "float32", length: 4 },
+                { name: "PressureIn", type: "float32", length: 4 },
+                { name: "PressureOut", type: "float32", length: 4 },
+                { name: "TemperatureIn", type: "float32", length: 4 },
+                { name: "TemperatureOut", type: "float32", length: 4 },
+                { name: "Vibration", type: "float32", length: 4 },
+                { name: "Energy", type: "float32", length: 4 },
+                { name: "BinaryStates", type: "uint32", length: 4 },
+            ]
+        };
+
+        function readField(dataView, offset, field) {
+            switch (field.type) {
+                case 'string': {
+                    const len = dataView.getUint8(offset);
+                    const used = dataView.getUint8(offset + 1);
+                    const bytes = new Uint8Array(dataView.buffer, offset + 2, used);
+                    const text = new TextDecoder().decode(bytes).replace(/\0/g, '').trim();
+                    return text;
+                }
+                case 'int32':
+                    return dataView.getInt32(offset, false);
+                case 'uint32':
+                    return dataView.getUint32(offset, false);
+                case 'float32':
+                    return dataView.getFloat32(offset, false);
+                case 'datetime64': {
+                    const nanoseconds = dataView.getBigUint64(offset, false);
+                    const milliseconds = Number(nanoseconds) / 1e6;
+                    return new Date(milliseconds).toISOString();
+                }
+                default:
+                    throw new Error(`Unsupported type: ${field.type}`);
+            }
+        }
+
+        async function processAndDownload() {
+            const fileInput = document.getElementById('binFile');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a file.');
+                return;
+            }
+
+            const buffer = await file.arrayBuffer();
+            const dataView = new DataView(buffer);
+            let offset = 0;
+
+            // Read metadata
+            const metadataValues = {};
+            for (const field of config.metadata) {
+                const val = readField(dataView, offset, field);
+                offset += field.length;
+                metadataValues[field.name] = val;
+            }
+
+            // Read records
+            const recordLength = config.record.reduce((sum, f) => sum + f.length, 0);
+            const records = [];
+            let index = 1; // running number start at 1
+            while (offset + recordLength <= buffer.byteLength) {
+                const record = {};
+                for (const field of config.record) {
+                    const val = readField(dataView, offset, field);
+                    offset += field.length;
+                    record[field.name] = val;
+                }
+                record.Index = index++; // add running number here
+                records.push(record);
+            }
+
+            const jsonData = {
+                metadata: metadataValues,
+                records: records
+            };
+
+            // Prepare JSON string
+            const jsonStr = JSON.stringify(jsonData, null, 2);
+
+            // Build CSV with semicolon delimiter
+            let csv = 'Metadata\n';
+            csv += Object.entries(metadataValues)
+                .map(([k, v]) => `"${k}";"${v}"`)
+                .join('\n') + '\n\n';
+
+            if (records.length > 0) {
+                csv += 'Records\n';
+                const headers = ['Index', ...Object.keys(records[0]).filter(h => h !== 'Index')];
+                csv += headers.map(h => `"${h}"`).join(';') + '\n';
+
+                for (const record of records) {
+                    const row = headers.map(h => {
+                        let val = record[h];
+                        if (typeof val === 'string' && (val.includes(';') || val.includes('"'))) {
+                            val = '"' + val.replace(/"/g, '""') + '"';
+                        }
+                        return val;
+                    });
+                    csv += row.join(';') + '\n';
+                }
+            }
+
+            // Create ZIP and add files
+            const zip = new JSZip();
+            zip.file(file.name, buffer);  
+            zip.file("data.json", jsonStr);
+            zip.file("data.csv", csv);
+
+            // Generate ZIP blob and trigger download
+            const content = await zip.generateAsync({ type: "blob" });
+            downloadFile("data_bundle.zip", content, "application/zip");
+        }
+
+        function downloadFile(filename, content, mimeType) {
+            const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 0);
+        }
+    </script>
+</body>
+
+</html>
