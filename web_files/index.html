@@ -58,6 +58,19 @@
                             </tr>
                         </tbody>
                     </table>
+
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><strong>Total File Size:</strong> <span id="totalSize">-</span> bytes</span>
+                            <span><strong>Max Allowed:</strong> <span id="maxSize">10485760</span> bytes</span>
+                        </div>
+                        <div class="progress mt-2" style="height: 25px;">
+                            <div id="usageBar" class="progress-bar bg-primary" role="progressbar" style="width: 0%;">
+                                0%
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -222,7 +235,7 @@
             hideSpinner();
 
             if (!result || !result.resources || result.resources.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="5" class="text-warning">No resources found.</td></tr>`;
+                tableBody.innerHTML = `<tr><td colspan="5" class="text">No resources found.</td></tr>`;
                 return;
             }
 
@@ -240,6 +253,32 @@
                     </td>
                 </tr>
             `).join('');
+
+            // === New: Compute total file size ===
+            let totalSize = 0;
+            result.resources.forEach(r => {
+                if (r.type === 'file' && r.size) {
+                    totalSize += r.size;
+                }
+            });
+
+            const maxSize = 4 * 1024 * 1024; // 4 MB
+            const usagePercent = Math.min((totalSize / maxSize) * 100, 100).toFixed(1);
+
+            document.getElementById('totalSize').textContent = totalSize.toLocaleString();
+            document.getElementById('usageBar').style.width = `${usagePercent}%`;
+            document.getElementById('usageBar').textContent = `${usagePercent}%`;
+
+            const usageBar = document.getElementById('usageBar');
+            usageBar.classList.remove('bg-primary', 'bg-warning', 'bg-danger');
+
+            if (usagePercent < 70) {
+                usageBar.classList.add('bg-primary');
+            } else if (usagePercent < 90) {
+                usageBar.classList.add('bg-warning');
+            } else {
+                usageBar.classList.add('bg-danger');
+            }
 
             document.querySelectorAll('.downloadBtn').forEach(button => {
                 button.addEventListener('click', async (e) => {
